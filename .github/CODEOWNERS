@@ -1,0 +1,27 @@
+# ============================================
+# CODEOWNERS — GeneBoyleSkills
+# ============================================
+# Kelly maintains the skill system.
+# Gene reviews content that represents his voice.
+#
+# How it works:
+# When a PR modifies files matching a pattern,
+# GitHub automatically requests review from the
+# listed owners before the PR can be merged.
+# ============================================
+
+# Default: Kelly owns everything
+*                           @kellylynnboyle
+
+# Gene reviews anything touching his public voice
+avatar/                     @kellylynnboyle @geneboyle
+social-media-voice/         @kellylynnboyle @geneboyle
+client-communication/       @kellylynnboyle @geneboyle
+
+# Kelly sole owner on technical/strategic skills
+demark-crypto-timing/       @kellylynnboyle
+competitive-intel/          @kellylynnboyle
+oc-market-intel/            @kellylynnboyle
+
+# GitHub config — Kelly only
+.github/                    @kellylynnboyle

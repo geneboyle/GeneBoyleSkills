@@ -1,0 +1,146 @@
+# ============================================
+# Validate Skills — runs on every push and PR
+# Checks that all SKILL.md files have valid
+# YAML frontmatter (name + description) and
+# that the repo structure is consistent.
+# ============================================
+
+name: Validate Skills
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*/SKILL.md'
+      - '*/references/**'
+      - '.github/workflows/validate-skills.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '*/SKILL.md'
+      - '*/references/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    name: Check skill structure
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate SKILL.md files
+        run: |
+          echo "🔍 Scanning for SKILL.md files..."
+          errors=0
+          skills_found=0
+
+          for skill_file in */SKILL.md; do
+            [ -f "$skill_file" ] || continue
+            skills_found=$((skills_found + 1))
+            skill_dir=$(dirname "$skill_file")
+            echo ""
+            echo "📂 Checking: $skill_dir"
+
+            # Check 1: YAML frontmatter exists (starts with ---)
+            first_line=$(head -1 "$skill_file")
+            if [ "$first_line" != "---" ]; then
+              echo "  ❌ Missing YAML frontmatter (must start with ---)"
+              errors=$((errors + 1))
+              continue
+            fi
+
+            # Check 2: Frontmatter has 'name:' field
+            if ! sed -n '/^---$/,/^---$/p' "$skill_file" | grep -q "^name:"; then
+              echo "  ❌ Missing 'name:' in frontmatter"
+              errors=$((errors + 1))
+            else
+              name=$(sed -n '/^---$/,/^---$/p' "$skill_file" | grep "^name:" | head -1 | sed 's/name: *//')
+              echo "  ✅ Name: $name"
+            fi
+
+            # Check 3: Frontmatter has 'description:' field
+            if ! sed -n '/^---$/,/^---$/p' "$skill_file" | grep -q "description:"; then
+              echo "  ❌ Missing 'description:' in frontmatter"
+              errors=$((errors + 1))
+            else
+              echo "  ✅ Description present"
+            fi
+
+            # Check 4: File isn't empty after frontmatter
+            body_lines=$(sed '1,/^---$/d' "$skill_file" | sed '1,/^---$/d' | grep -c '[^[:space:]]' || true)
+            if [ "$body_lines" -lt 5 ]; then
+              echo "  ⚠️  Warning: Very short skill body ($body_lines non-empty lines)"
+            else
+              echo "  ✅ Body: $body_lines content lines"
+            fi
+
+            # Check 5: References directory matches references in SKILL.md
+            if grep -q "references/" "$skill_file"; then
+              if [ ! -d "$skill_dir/references" ]; then
+                echo "  ❌ SKILL.md references 'references/' but directory doesn't exist"
+                errors=$((errors + 1))
+              else
+                echo "  ✅ References directory exists"
+              fi
+            fi
+          done
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 Results: $skills_found skills checked, $errors errors"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          if [ $errors -gt 0 ]; then
+            echo "❌ Validation failed with $errors error(s)"
+            exit 1
+          else
+            echo "✅ All skills valid!"
+          fi
+
+      - name: Check for secrets in skill files
+        run: |
+          echo "🔒 Scanning for potential secrets..."
+          found=0
+
+          # Check for common secret patterns
+          for pattern in \
+            "ghp_[a-zA-Z0-9]" \
+            "sk-[a-zA-Z0-9]" \
+            "AKIA[A-Z0-9]" \
+            "password\s*[:=]" \
+            "api_key\s*[:=]" \
+            "secret\s*[:=]"; do
+            matches=$(grep -rn "$pattern" --include="*.md" . 2>/dev/null | grep -v ".github/" || true)
+            if [ -n "$matches" ]; then
+              echo "  ⚠️  Potential secret pattern found:"
+              echo "$matches"
+              found=$((found + 1))
+            fi
+          done
+
+          if [ $found -gt 0 ]; then
+            echo "❌ Potential secrets detected — review before merging"
+            exit 1
+          else
+            echo "✅ No secrets detected"
+          fi
+
+      - name: Generate skill inventory
+        run: |
+          echo "# Skill Inventory" > /tmp/inventory.md
+          echo "" >> /tmp/inventory.md
+          echo "| Skill | Name | Has References |" >> /tmp/inventory.md
+          echo "|-------|------|---------------|" >> /tmp/inventory.md
+
+          for skill_file in */SKILL.md; do
+            [ -f "$skill_file" ] || continue
+            dir=$(dirname "$skill_file")
+            name=$(sed -n '/^---$/,/^---$/p' "$skill_file" | grep "^name:" | head -1 | sed 's/name: *//')
+            has_refs="No"
+            [ -d "$dir/references" ] && has_refs="Yes"
+            echo "| $dir | $name | $has_refs |" >> /tmp/inventory.md
+          done
+
+          echo ""
+          cat /tmp/inventory.md
